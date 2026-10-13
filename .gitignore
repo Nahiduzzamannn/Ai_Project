@@ -1,0 +1,23 @@
+# Python 
+__pycache__/ 
+*.py[cod] 
+*.pyo 
+*.pyd 
+.venv/ 
+venv/ 
+myenv/ 
+.env 
+.env.* 
+ 
+# Node 
+node_modules/ 
+.vite/ 
+dist/ 
+build/ 
+ 
+# OS 
+.DS_Store 
+Thumbs.db 
+ 
+# Project data 
+Backend/backend/uploaded_pdfs/
