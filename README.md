@@ -39,9 +39,14 @@ A full-stack app for teachers: upload a textbook PDF, find a chapter, let a free
 
 ## Setup
 
-### 1. Get a free AI API key
+### 1. Create `.env` and get a free AI API key
 
-Create a free key at https://console.groq.com/keys. Then put it in `Backend/backend/.env`:
+Copy `Backend/backend/.env.example` to `Backend/backend/.env` and fill in your database URL.
+
+Then create a free key at https://console.groq.com/keys. There are two ways to add it:
+
+- **In the app (easiest):** start the app, click the red **"AI: no API key"** badge in the header (or **Set AI key** in the chat), paste the key and click Save. The key is checked with the provider first, then saved to `.env`. No restart is needed.
+- **By hand:** put it in `Backend/backend/.env`. The backend re-reads `.env` on every AI call, so no restart is needed here either.
 
 ```env
 DATABASE_URL=postgresql+psycopg2://postgres:your_password@localhost:5432/AI_ML_project
@@ -108,6 +113,7 @@ Open http://localhost:5173. The header shows whether the API, Elasticsearch and 
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/v1/health` | Status of the API, Elasticsearch and the AI agent |
+| POST | `/api/v1/settings/llm` | Check an AI key (`{api_key, provider: "groq"\|"gemini"}`) and save it to `.env`. Only accepted from localhost |
 | POST | `/api/v1/search/sync` | Copy all data from Postgres into Elasticsearch |
 | POST | `/api/v1/documents/upload` | Upload a PDF. It is chunked and chapter-split, then embedded and indexed |
 | GET | `/api/v1/documents` | List documents |
