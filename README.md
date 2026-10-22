@@ -64,6 +64,8 @@ LLM_MODEL=gemini-2.5-flash
 
 ### 2. Start Elasticsearch (optional but recommended)
 
+> **Local development only.** The settings below turn off Elasticsearch's login and only allow connections from your own computer (`127.0.0.1`). Never use them on a server or expose port 9200 to a network.
+
 **Windows (no Docker):**
 1. Download the Elasticsearch 8 zip from https://www.elastic.co/downloads/elasticsearch and extract it.
 2. Add these lines to `config/elasticsearch.yml`:
@@ -78,7 +80,7 @@ LLM_MODEL=gemini-2.5-flash
 **Docker:**
 
 ```bash
-docker run -d --name es -p 9200:9200 -e discovery.type=single-node -e xpack.security.enabled=false -e ES_JAVA_OPTS="-Xms1g -Xmx1g" docker.elastic.co/elasticsearch/elasticsearch:8.19.3
+docker run -d --name es -p 127.0.0.1:9200:9200 -e discovery.type=single-node -e xpack.security.enabled=false -e ES_JAVA_OPTS="-Xms1g -Xmx1g" docker.elastic.co/elasticsearch/elasticsearch:8.19.3
 ```
 
 If you start Elasticsearch after data already exists, copy that data in with `POST /api/v1/search/sync`.
@@ -147,3 +149,10 @@ Define osmosis.,short,,Movement of water across a membrane...,2,medium,Cell Biol
 
 - Scanned (image-only) PDFs have no extractable text. Run OCR on them first.
 - Free AI tiers have rate limits. `LLM_CONTEXT_CHARS` (default 12000) caps how much chapter text is sent per request.
+
+## Security
+
+- **Never commit `.env`.** It holds your API key and database password. `.gitignore` already excludes it; only `.env.example` (placeholders only) is in the repository.
+- **Keep the app on your own computer.** The app has no login, so anyone who can reach the API can read, change or delete documents and questions. The run commands above listen on `localhost` only. Don't start the backend with `--host 0.0.0.0` or put it on the internet without adding authentication first.
+- **If an API key leaks** (for example, it gets pushed to GitHub), delete it in the Groq or Google console straight away and create a new one.
+- Use a strong database password, not a default like `12345`.
