@@ -1,191 +1,143 @@
-# AI PDF RAG Project
+# AI Question Generator (PDF RAG)
 
-A full-stack document intelligence application that lets users upload PDF files, extract text, generate embeddings, store the content in a database, and perform semantic search over the uploaded documents.
+A full-stack app for teachers: upload a textbook PDF, find a chapter, let a free AI agent write questions from it, keep them in a question bank, and print shuffled multi-set question papers.
 
-This project combines a FastAPI backend with a React + Vite frontend, and is designed around a PDF retrieval workflow powered by OpenAI embeddings and PostgreSQL with pgvector support.
+## Features
 
-## Project Overview
+1. **Upload a PDF.** The text is split into chunks and chapters. Chunks are embedded into **pgvector** and indexed in **Elasticsearch**.
+   - Chapters are detected from the PDF's bookmarks, or from "Chapter N / Unit N / Lesson N" headings. You can also add a chapter by page range.
+2. **Search for a chapter.** Hybrid search combines Elasticsearch BM25 keyword search with pgvector semantic search, using Reciprocal Rank Fusion. For example, both "Photosynthesis" and "how plants make food" find the right chapter.
+3. **AI Question Chat (RAG).** Choose a scope (all documents, one PDF, or one chapter) and chat with the AI. Examples: "Give me 5 MCQ on the Calvin cycle", "make Q2 harder", "summarize this chapter", or ask in Bangla.
+   - Every message retrieves the relevant chunks (pgvector + Elasticsearch, fused with RRF) and the AI answers only from them, citing sources like [1] with page numbers.
+   - In chapter scope, chunks spread across the whole chapter are added too, so a request like "5 MCQ from this chapter" covers all of it.
+   - Questions appear as cards in the chat. Tick the ones you want and save them to the question bank.
+   - The chat history is kept in the browser and sent with each request, so follow-ups work.
+4. **Question bank.**
+   - Add questions by hand, bulk upload them from CSV or JSON, or save AI-generated ones.
+   - View them with full-text search (Elasticsearch, typo-tolerant) and filters for type, topic, difficulty, source and document.
+   - Edit or delete questions.
+5. **Question paper PDF.** Build a paper in one of two ways:
+   - pick specific questions from the bank, or
+   - ask for "N MCQ + N short + N broad" picked at random, with optional filters.
 
-The application is structured around a simple but practical AI workflow:
-
-1. A user uploads a PDF file from the frontend.
-2. The backend validates and saves the PDF.
-3. The PDF is parsed page by page using PyMuPDF.
-4. Text is split into manageable chunks.
-5. Each chunk is converted into an embedding via the OpenAI embeddings API.
-6. Chunks and embeddings are stored in a database.
-7. A semantic search query generates an embedding and returns the most relevant document chunks.
+   You can then:
+   - generate **several sets (A, B, C...)**, with question order and MCQ options shuffled per set;
+   - add an answer key for each set;
+   - give a seed so the same paper can be rebuilt.
 
 ## Tech Stack
 
-### Frontend
-- React 19
-- Vite
-- JavaScript
-- Tailwind CSS
+| Part | Technology |
+|---|---|
+| Frontend | React 19, Vite, Tailwind CSS 4 |
+| API | FastAPI, SQLAlchemy, Alembic |
+| Database + vector DB | PostgreSQL + **pgvector** |
+| Keyword search | **Elasticsearch 8** (optional; falls back to Postgres search if it's not running) |
+| Embeddings | **fastembed** `BAAI/bge-small-en-v1.5`. It runs locally on CPU, is free, and needs no API key |
+| AI agent | **Groq** free API (`openai/gpt-oss-120b`), called through the OpenAI SDK. Any OpenAI-compatible API works, e.g. Google Gemini's free tier |
+| PDF | PyMuPDF (reading), ReportLab (question papers) |
 
-### Backend
-- Python 3.12
-- FastAPI
-- SQLAlchemy
-- PostgreSQL + pgvector
-- PyMuPDF
-- OpenAI Python SDK
-- Alembic for database migrations
+## Setup
 
-## Repository Structure
+### 1. Get a free AI API key
 
-```text
-AI_ML_Project/
-├── Backend/
-│   ├── backend/
-│   │   ├── alembic.ini
-│   │   ├── app/
-│   │   │   ├── api/
-│   │   │   │   └── v1/
-│   │   │   │       ├── documents.py
-│   │   │   │       ├── health.py
-│   │   │   │       └── router.py
-│   │   │   ├── core/
-│   │   │   │   ├── config.py
-│   │   │   │   └── deps.py
-│   │   │   ├── db/
-│   │   │   │   ├── base.py
-│   │   │   │   ├── base_imports.py
-│   │   │   │   ├── session.py
-│   │   │   │   └── migrations/
-│   │   │   ├── models/
-│   │   │   │   ├── document.py
-│   │   │   │   └── document_chunk.py
-│   │   │   ├── schemas/
-│   │   │   │   └── document.py
-│   │   │   ├── services/
-│   │   │   │   ├── embedding_service.py
-│   │   │   │   └── pdf_parser.py
-│   │   │   └── main.py
-│   │   └── uploaded_pdfs/
-│   └── myenv/
-├── Frontend/
-│   ├── src/
-│   ├── package.json
-│   ├── vite.config.js
-│   └── index.html
-├── .gitignore
-├── README.md
-└── package-lock.json
-```
-
-## Backend Architecture
-
-The backend is organized around a clean FastAPI structure:
-
-- app/main.py: application entry point and CORS setup
-- app/core/config.py: environment configuration and app settings
-- app/core/deps.py: dependency injection for database access
-- app/api/v1/router.py: API routing entry
-- app/api/v1/documents.py: document upload and search endpoints
-- app/services/pdf_parser.py: PDF text extraction and chunking
-- app/services/embedding_service.py: OpenAI embedding generation
-- app/models/document.py and document_chunk.py: SQLAlchemy models
-- app/db/session.py: database session setup
-
-## API Endpoints
-
-### Health
-- GET /api/v1/health
-
-### Document Upload
-- POST /api/v1/documents/upload
-- Accepts a PDF file
-- Saves the file on disk
-- Extracts text
-- Splits into chunks
-- Generates embeddings
-- Stores the document and chunks in the database
-
-### Document Search
-- GET /api/v1/documents/search
-- Accepts a query string and optional top_k value
-- Generates an embedding for the query
-- Uses pgvector similarity to return the nearest document chunks
-
-## Frontend Features
-
-The frontend is a simple React interface for uploading PDFs and showing upload responses or errors. It uses a file input that validates PDF files before sending them to the backend.
-
-Key features:
-- PDF upload form
-- Validation for file type
-- Loading states
-- Error and success feedback
-- API base URL configuration through environment variables
-
-## Environment Configuration
-
-Before running the project, configure the required environment variables.
-
-### Backend environment
-Create a .env file in the Backend/backend directory with values similar to:
+Create a free key at https://console.groq.com/keys. Then put it in `Backend/backend/.env`:
 
 ```env
-OPENAI_API_KEY=your_openai_api_key
 DATABASE_URL=postgresql+psycopg2://postgres:your_password@localhost:5432/AI_ML_project
+LLM_API_KEY=gsk_your_groq_key
+ELASTICSEARCH_URL=http://localhost:9200
 ```
 
-### Frontend environment
-The app reads the API base URL from Vite environment variables. For example:
+To use **Google Gemini** (also free) instead, add these lines. Get the key at https://aistudio.google.com/apikey.
 
 ```env
-VITE_API_BASE_URL=http://localhost:8000
+LLM_API_KEY=your_gemini_key
+LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+LLM_MODEL=gemini-2.5-flash
 ```
 
-## Run the Project
+### 2. Start Elasticsearch (optional but recommended)
 
-### 1. Start the backend
+**Windows (no Docker):**
+1. Download the Elasticsearch 8 zip from https://www.elastic.co/downloads/elasticsearch and extract it.
+2. Add these lines to `config/elasticsearch.yml`:
+
+   ```yaml
+   xpack.security.enabled: false
+   discovery.type: single-node
+   network.host: 127.0.0.1
+   ```
+3. Run `bin\elasticsearch.bat`.
+
+**Docker:**
 
 ```bash
-cd Backend/backend
-..
+docker run -d --name es -p 9200:9200 -e discovery.type=single-node -e xpack.security.enabled=false -e ES_JAVA_OPTS="-Xms1g -Xmx1g" docker.elastic.co/elasticsearch/elasticsearch:8.19.3
 ```
 
-Then activate the virtual environment and run:
+If you start Elasticsearch after data already exists, copy that data in with `POST /api/v1/search/sync`.
+
+### 3. Backend
 
 ```bash
-..\myenv\Scripts\activate
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+cd Backend
+myenv\Scripts\activate
+pip install -r backend/requirements.txt
+cd backend
+alembic upgrade head
+python -m uvicorn app.main:app --port 8000 --reload
 ```
 
-### 2. Start the frontend
+The first upload downloads the embedding model (~70 MB), once.
+
+API docs: http://localhost:8000/docs
+
+### 4. Frontend
 
 ```bash
 cd Frontend
 npm install
-npm run dev -- --host 0.0.0.0 --port 5173
+npm run dev
 ```
 
-Then open:
-- http://localhost:5173
+Open http://localhost:5173. The header shows whether the API, Elasticsearch and the AI key are working.
 
-The backend should be available at:
-- http://localhost:8000
+## API Overview
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/v1/health` | Status of the API, Elasticsearch and the AI agent |
+| POST | `/api/v1/search/sync` | Copy all data from Postgres into Elasticsearch |
+| POST | `/api/v1/documents/upload` | Upload a PDF. It is chunked and chapter-split, then embedded and indexed |
+| GET | `/api/v1/documents` | List documents |
+| POST | `/api/v1/documents/{id}/reindex` | Rebuild embeddings, chapters and indexes |
+| DELETE | `/api/v1/documents/{id}` | Delete a document |
+| GET | `/api/v1/documents/search?q=` | Semantic chunk search (pgvector) |
+| GET/POST | `/api/v1/documents/{id}/chapters` | List chapters, or add one by page range |
+| GET | `/api/v1/chapters/search?q=&document_id=` | Hybrid chapter search |
+| GET/DELETE | `/api/v1/chapters/{id}` | Chapter text, or delete the chapter |
+| POST | `/api/v1/chat` | RAG chat: `{messages, chapter_id?, document_id?}` returns `{reply, questions, sources}` |
+| POST | `/api/v1/chapters/{id}/generate-questions` | One-shot question generation, without chat |
+| GET | `/api/v1/questions` | List questions, with search and filters |
+| POST | `/api/v1/questions` · `/questions/bulk` | Add one question · add many |
+| POST | `/api/v1/questions/upload` | Bulk import from CSV or JSON |
+| GET | `/api/v1/questions/template.csv` | CSV template |
+| PUT/DELETE | `/api/v1/questions/{id}` | Edit or delete a question |
+| POST | `/api/v1/questions/paper` | Build the multi-set shuffled question paper PDF |
+
+### CSV format for question upload
+
+```csv
+text,qtype,options,answer,marks,difficulty,topic
+What is the powerhouse of the cell?,mcq,Nucleus|Mitochondria|Ribosome|Golgi body,Mitochondria,1,easy,Cell Biology
+Plants make food by photosynthesis.,true_false,,True,1,easy,Plants
+Define osmosis.,short,,Movement of water across a membrane...,2,medium,Cell Biology
+```
+
+`qtype` is one of `mcq`, `true_false`, `short` or `broad`. A JSON upload is a list of objects with the same fields, where `options` is an array.
 
 ## Notes
 
-- The backend currently expects PostgreSQL with pgvector enabled.
-- The embedding generation depends on a valid OpenAI API key.
-- Uploaded PDF files are stored under the uploaded_pdfs directory in the backend project.
-- The project is designed as a lightweight AI document search prototype and can be extended with authentication, file metadata, user-level documents, and richer search UX.
-
-## Potential Enhancements
-
-- Add authentication and authorization
-- Support document deletion and listing
-- Add full-text search fallback
-- Improve chunk overlap and preprocessing strategies
-- Add vector index tuning for production workloads
-- Add a conversational AI layer on top of retrieved chunks
-- Build a more advanced dashboard for document management
-
-## Summary
-
-This project demonstrates a practical AI document retrieval workflow using modern Python and React technologies. It is a strong starting point for building document intelligence, enterprise knowledge search, or PDF-based Q&A systems.
+- Scanned (image-only) PDFs have no extractable text. Run OCR on them first.
+- Free AI tiers have rate limits. `LLM_CONTEXT_CHARS` (default 12000) caps how much chapter text is sent per request.

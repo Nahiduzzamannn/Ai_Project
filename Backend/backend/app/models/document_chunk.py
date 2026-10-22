@@ -4,6 +4,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from pgvector.sqlalchemy import Vector
 
+from app.core.config import EMBEDDING_DIM
+
 class DocumentChunk(Base):
     __tablename__ = "document_chunks"
 
@@ -22,7 +24,7 @@ class DocumentChunk(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     embedding: Mapped[list[float] | None] = mapped_column(
-    Vector(1536),  # OpenAI embedding size
+    Vector(EMBEDDING_DIM),  # local fastembed model size
     nullable=True,
 )
 

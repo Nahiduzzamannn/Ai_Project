@@ -31,3 +31,11 @@ class Document(Base):
         back_populates="document",
         cascade="all, delete-orphan",
     )
+
+    # One document -> many chapters
+    chapters: Mapped[List["Chapter"]] = relationship(
+        "Chapter",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="Chapter.order_index",
+    )

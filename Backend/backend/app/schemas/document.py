@@ -15,6 +15,10 @@ class DocumentOut(BaseModel):
         from_attributes = True
 
 
+class DocumentSummary(DocumentOut):
+    chapter_count: int = 0
+
+
 class ChunkSearchResult(BaseModel):
     """
     Schema for a single search result chunk.

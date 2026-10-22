@@ -21,3 +21,4 @@ Thumbs.db
  
 # Project data 
 Backend/backend/uploaded_pdfs/
+!.env.example
