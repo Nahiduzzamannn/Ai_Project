@@ -22,8 +22,11 @@ class Question(Base):
     difficulty: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
     topic: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
 
-    # "manual", "upload" or "ai"
+    # "manual", "upload", "ai" or "ocr"
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
+    ocr_import_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("ocr_imports.id", ondelete="SET NULL"), nullable=True
+    )
 
     document_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True

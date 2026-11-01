@@ -12,3 +12,6 @@ openai
 fastembed
 elasticsearch>=8.15,<9
 reportlab
+Pillow
+pytesseract
+python-docx

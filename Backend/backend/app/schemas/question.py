@@ -31,7 +31,8 @@ class QuestionBase(BaseModel):
 
 
 class QuestionCreate(QuestionBase):
-    source: Literal["manual", "upload", "ai"] = "manual"
+    source: Literal["manual", "upload", "ai", "ocr"] = "manual"
+    ocr_import_id: Optional[int] = None
 
 
 class QuestionUpdate(QuestionBase):
@@ -41,6 +42,7 @@ class QuestionUpdate(QuestionBase):
 class QuestionOut(QuestionBase):
     id: int
     source: str
+    ocr_import_id: Optional[int] = None
     created_at: datetime
 
     class Config:

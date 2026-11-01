@@ -6,12 +6,14 @@ import ChatTab from "./components/ChatTab";
 import QuestionBankTab from "./components/QuestionBankTab";
 import PaperTab from "./components/PaperTab";
 import AiKeyDialog from "./components/AiKeyDialog";
+import OcrTab from "./components/OcrTab";
 
 const TABS = [
   { id: "documents", label: "1. Documents" },
   { id: "chapters", label: "2. AI Question Chat" },
-  { id: "bank", label: "3. Question Bank" },
-  { id: "paper", label: "4. Question Paper" },
+  { id: "ocr", label: "3. Scan questions" },
+  { id: "bank", label: "4. Question Bank" },
+  { id: "paper", label: "5. Question Paper" },
 ];
 
 export default function App() {
@@ -98,6 +100,7 @@ export default function App() {
             onMakePaper={() => setTab("paper")}
           />
         )}
+        {tab === "ocr" && <OcrTab onSaved={() => setTab("bank")} />}
         {tab === "paper" && (
           <PaperTab
             documents={documents}

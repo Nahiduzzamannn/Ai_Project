@@ -12,7 +12,7 @@ const EMPTY = {
   difficulty: "medium",
   topic: "",
 };
-const SOURCE_COLORS = { manual: "gray", upload: "amber", ai: "purple" };
+const SOURCE_COLORS = { manual: "gray", upload: "amber", ai: "purple", ocr: "green" };
 const PAGE_SIZE = 25;
 
 export default function QuestionBankTab({ documents, selectedIds, setSelectedIds, onMakePaper }) {
@@ -63,6 +63,21 @@ export default function QuestionBankTab({ documents, selectedIds, setSelectedIds
     }
   }
 
+  async function copyQuestion(q) {
+    const content = [q.text, ...(q.qtype === "mcq" ? (q.options || []).map((o, i) => `${"abcdefgh"[i]}) ${o}`) : [])].join("\n");
+    try { await navigator.clipboard.writeText(content); }
+    catch { setErr("Clipboard access failed. Use the Word export instead."); }
+  }
+
+  async function downloadWord() {
+    try {
+      const blob = await api.exportWord(selectedIds);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = "question_draft.docx"; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (e) { setErr(e.message); }
+  }
+
   const selected = new Set(selectedIds);
   function toggle(id) {
     setSelectedIds(selected.has(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]);
@@ -100,6 +115,7 @@ export default function QuestionBankTab({ documents, selectedIds, setSelectedIds
           selectedIds.length > 0 && (
             <div className="flex gap-2">
               <Button variant="secondary" onClick={() => setSelectedIds([])}>Clear selection</Button>
+              <Button variant="secondary" onClick={downloadWord}>Download Word draft</Button>
               <Button variant="secondary" onClick={onMakePaper}>
                 Make paper from {selectedIds.length} selected →
               </Button>
@@ -136,6 +152,7 @@ export default function QuestionBankTab({ documents, selectedIds, setSelectedIds
             <option value="manual">Manual</option>
             <option value="upload">Uploaded</option>
             <option value="ai">AI generated</option>
+            <option value="ocr">OCR scan</option>
           </select>
           <Button type="submit" loading={loading}>Filter</Button>
         </form>
@@ -181,6 +198,7 @@ export default function QuestionBankTab({ documents, selectedIds, setSelectedIds
                     <QuestionView q={q} />
                   </div>
                   <div className="flex flex-col gap-1 text-sm">
+                    <button className="text-blue-600 hover:underline" onClick={() => copyQuestion(q)}>Copy</button>
                     <button
                       className="text-blue-600 hover:underline"
                       onClick={() => {

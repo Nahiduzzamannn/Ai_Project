@@ -68,7 +68,9 @@ def get_client():
     try:
         from elasticsearch import Elasticsearch
 
-        kwargs = {"request_timeout": 10}
+        # Elasticsearch is optional. Fail fast when it is not running so the
+        # health badge and Postgres fallback remain responsive.
+        kwargs = {"request_timeout": 2, "max_retries": 0}
         if settings.ELASTICSEARCH_API_KEY:
             kwargs["api_key"] = settings.ELASTICSEARCH_API_KEY
         client = Elasticsearch(settings.ELASTICSEARCH_URL, **kwargs)

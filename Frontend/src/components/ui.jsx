@@ -1,3 +1,20 @@
+import katex from "katex";
+import "katex/dist/katex.min.css";
+
+export function RichText({ text = "" }) {
+  const parts = text.split(/(\$\$[\s\S]+?\$\$|\$[^$\n]+\$)/g);
+  return <span className="whitespace-pre-wrap font-[Nirmala_UI,SolaimanLipi,sans-serif]">{parts.map((part, index) => {
+    if (part.startsWith("$") && part.endsWith("$")) {
+      const displayMode = part.startsWith("$$");
+      const formula = part.slice(displayMode ? 2 : 1, displayMode ? -2 : -1);
+      try {
+        return <span key={index} dangerouslySetInnerHTML={{ __html: katex.renderToString(formula, { displayMode, throwOnError: false, trust: false, strict: "ignore" }) }} />;
+      } catch { return <span key={index}>{part}</span>; }
+    }
+    return <span key={index}>{part}</span>;
+  })}</span>;
+}
+
 export function Card({ title, subtitle, actions, children }) {
   return (
     <section className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
@@ -92,19 +109,19 @@ export function Badge({ children, color = "gray" }) {
 export function QuestionView({ q }) {
   return (
     <div>
-      <p className="text-gray-900">{q.text}</p>
+      <p className="text-gray-900"><RichText text={q.text} /></p>
       {q.options && q.qtype === "mcq" && (
         <ol className="mt-1 ml-5 text-sm text-gray-700 list-[lower-alpha]">
           {q.options.map((o, i) => (
             <li key={i} className={o === q.answer ? "font-semibold text-green-700" : ""}>
-              {o}
+              <RichText text={o} />
             </li>
           ))}
         </ol>
       )}
       {q.answer && q.qtype !== "mcq" && (
         <p className="mt-1 text-sm text-green-700">
-          <span className="font-semibold">Answer:</span> {q.answer}
+          <span className="font-semibold">Answer:</span> <RichText text={q.answer} />
         </p>
       )}
     </div>

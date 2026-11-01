@@ -66,6 +66,22 @@ export const api = {
     fd.append("file", file);
     return request(`/questions/upload${query({ topic })}`, { method: "POST", body: fd });
   },
+  createOcrImport: (file, subject, forceOcr) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("subject", subject);
+    fd.append("force_ocr", String(forceOcr));
+    return request("/ocr/imports", { method: "POST", body: fd });
+  },
+  listOcrImports: () => request("/ocr/imports"),
+  getOcrImport: (id) => request(`/ocr/imports/${id}`),
+  ocrFileUrl: (id) => `${V1}/ocr/imports/${id}/file`,
+  acceptOcrQuestions: (id, questions) => request(`/ocr/imports/${id}/questions`, json("POST", { questions })),
+  exportWord: async (questionIds) => {
+    const res = await fetch(`${V1}/questions/word`, json("POST", { question_ids: questionIds }));
+    if (!res.ok) throw new Error((await res.json()).detail || `Request failed (${res.status})`);
+    return await res.blob();
+  },
   templateUrl: `${V1}/questions/template.csv`,
 
   // Question paper -> returns { blob, filename, seed }

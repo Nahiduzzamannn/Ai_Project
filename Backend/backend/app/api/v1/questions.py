@@ -15,10 +15,12 @@ import io
 import json
 import random
 from datetime import datetime
+from docx import Document as WordDocument
+from docx.shared import Pt
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -30,6 +32,11 @@ from app.schemas.question import (
 from app.services import paper_service, search_service
 
 router = APIRouter()
+
+
+class WordRequest(BaseModel):
+    question_ids: list[int] = Field(..., min_length=1, max_length=200)
+    title: str = "Question draft"
 
 CSV_COLUMNS = ["text", "qtype", "options", "answer", "marks", "difficulty", "topic"]
 CSV_EXAMPLE = [
@@ -217,6 +224,32 @@ def delete_question(question_id: int, db: Session = Depends(get_db)):
     db.commit()
     search_service.delete_question(question_id)
     return {"deleted": question_id}
+
+
+@router.post("/questions/word")
+def export_word(body: WordRequest, db: Session = Depends(get_db)):
+    found = {q.id: q for q in db.scalars(select(Question).where(Question.id.in_(body.question_ids)))}
+    missing = [qid for qid in body.question_ids if qid not in found]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"Questions not found: {missing}")
+    doc = WordDocument()
+    doc.add_heading(body.title.strip() or "Question draft", 0)
+    style = doc.styles["Normal"]
+    style.font.name = "Nirmala UI"
+    style.font.size = Pt(12)
+    for index, qid in enumerate(body.question_ids, 1):
+        q = found[qid]
+        doc.add_paragraph(f"{index}. {q.text}")
+        if q.qtype == "mcq" and q.options:
+            for label, option in zip("abcdefgh", q.options):
+                doc.add_paragraph(f"{label}) {option}", style="Normal")
+    output = io.BytesIO()
+    doc.save(output)
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": 'attachment; filename="question_draft.docx"'},
+    )
 
 
 @router.post("/questions/paper")

@@ -21,4 +21,6 @@ Thumbs.db
  
 # Project data 
 Backend/backend/uploaded_pdfs/
+Backend/backend/uploaded_ocr/
+.runtime/
 !.env.example
