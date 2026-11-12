@@ -15,7 +15,25 @@ export default function OcrTab({ onSaved }) {
   const activeImportId = current?.id;
   const activeImportStatus = current?.status;
 
-  useEffect(() => { api.listOcrImports().then(setImports).catch(() => {}); }, []);
+  useEffect(() => {
+    api.listOcrImports().then((items) => {
+      setImports(items);
+      if (items.length > 0) {
+        // Auto-select an active job if in-progress, or the most recent one
+        const activeItem = items.find((it) => ["queued", "processing"].includes(it.status)) || items[0];
+        if (activeItem) {
+          api.getOcrImport(activeItem.id).then((row) => {
+            showImport(row);
+            if (row.status === "completed") {
+              setMessage("OCR সম্পন্ন হয়েছে। নিচে প্রশ্নগুলো দেখে নিন।");
+            } else if (["queued", "processing"].includes(row.status)) {
+              setMessage(`OCR চলছে (${row.processed_pages}/${row.total_pages} পৃষ্ঠা)...`);
+            }
+          }).catch(() => {});
+        }
+      }
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!activeImportId || !["queued", "processing"].includes(activeImportStatus)) return;
@@ -28,8 +46,30 @@ export default function OcrTab({ onSaved }) {
         const row = await api.getOcrImport(activeImportId, controller.signal);
         if (!active) return;
         setError("");
-        if (row.status === "completed") showImport(row);
-        else setCurrent(row);
+
+        // Keep "আগের স্ক্যান" buttons updated in real-time
+        setImports((prev) =>
+          prev.map((item) =>
+            item.id === row.id
+              ? { ...item, status: row.status, processed_pages: row.processed_pages, total_pages: row.total_pages }
+              : item
+          )
+        );
+
+        if (row.status === "completed") {
+          showImport(row);
+          setMessage("OCR সফলভাবে সম্পন্ন হয়েছে! নিচে প্রশ্নগুলো দেখে নিন এবং সংশোধন করুন।");
+        } else if (row.status === "processing") {
+          setCurrent(row);
+          setMessage(`OCR চলছে (${row.processed_pages}/${row.total_pages} পৃষ্ঠা)... অনুগ্রহ করে অপেক্ষা করুন।`);
+        } else if (row.status === "failed") {
+          setCurrent(row);
+          setMessage("");
+          setError(row.error || "OCR ব্যর্থ হয়েছে।");
+        } else {
+          setCurrent(row);
+        }
+
         if (!["queued", "processing"].includes(row.status)) {
           api.listOcrImports().then((items) => { if (active) setImports(items); }).catch(() => {});
           return;
@@ -45,7 +85,14 @@ export default function OcrTab({ onSaved }) {
 
   function showImport(row) {
     setCurrent(row);
-    setCandidates(row.candidates.map((q, i) => ({ ...q, key: i, selected: true, optionsText: (q.options || []).join("\n") })));
+    setCandidates((row.candidates || []).map((q, i) => ({ ...q, key: i, selected: true, optionsText: (q.options || []).join("\n") })));
+    setImports((prev) =>
+      prev.map((item) =>
+        item.id === row.id
+          ? { ...item, status: row.status, processed_pages: row.processed_pages, total_pages: row.total_pages }
+          : item
+      )
+    );
   }
 
   async function upload(e) {
@@ -54,16 +101,25 @@ export default function OcrTab({ onSaved }) {
     try {
       const row = await api.createOcrImport(file, subject.trim());
       showImport(row);
-      setImports(await api.listOcrImports());
-      setMessage("ফাইল গ্রহণ করা হয়েছে। OCR চলছে; অগ্রগতি এখানে দেখা যাবে।");
+      setMessage("ফাইল গ্রহণ করা হয়েছে। OCR শুরু হওয়ার অপেক্ষায় আছে...");
+      const updatedList = await api.listOcrImports();
+      setImports(updatedList);
     } catch (err) { setError(err.message); }
     finally { setBusy(false); }
   }
 
   async function openImport(id) {
     setError("");
-    try { showImport(await api.getOcrImport(id)); }
-    catch (err) { setError(err.message); }
+    setMessage("");
+    try {
+      const row = await api.getOcrImport(id);
+      showImport(row);
+      if (row.status === "completed") {
+        setMessage("OCR সম্পন্ন হয়েছে। নিচে প্রশ্নগুলো দেখে নিন।");
+      } else if (["queued", "processing"].includes(row.status)) {
+        setMessage(`OCR চলছে (${row.processed_pages}/${row.total_pages} পৃষ্ঠা)...`);
+      }
+    } catch (err) { setError(err.message); }
   }
 
   function update(key, field, value) {
@@ -97,12 +153,71 @@ export default function OcrTab({ onSaved }) {
         <Button type="submit" disabled={!file || !subject.trim()} loading={busy}>OCR করুন</Button>
       </form>
       <p className="text-xs text-gray-500 mt-3">পরিষ্কার, সোজা ছবি ভালো ফল দেয়। গণিতের সূত্র OCR-এ ভুল হতে পারে; $...$ দিয়ে LaTeX লিখে browser preview দেখুন।</p>
-      <div className="mt-3"><Alert>{error}</Alert><Alert kind="success">{message}</Alert></div>
+      <div className="mt-3 space-y-2">
+        <Alert kind="error">{error}</Alert>
+        {message && (
+          <Alert kind={current?.status === "completed" ? "success" : "info"}>
+            <div className="flex items-center gap-2">
+              {["queued", "processing"].includes(current?.status) && (
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500 animate-ping mr-1" />
+              )}
+              <span>{message}</span>
+            </div>
+          </Alert>
+        )}
+      </div>
     </Card>
 
-    {imports.length > 0 && <Card title="আগের স্ক্যান">
-      <div className="flex flex-wrap gap-2">{imports.map((row) => <button key={row.id} onClick={() => openImport(row.id)} className="border rounded-lg px-3 py-2 text-sm hover:bg-blue-50">{row.filename} · {row.subject} · {row.processed_pages}/{row.total_pages} page · {row.status}</button>)}</div>
-    </Card>}
+    {imports.length > 0 && (
+      <Card title="আগের স্ক্যান" subtitle="যেকোনো স্ক্যানে ক্লিক করে তার ফলাফল ও প্রোগ্রেস দেখুন">
+        <div className="flex flex-wrap gap-2">
+          {imports.map((row) => {
+            const isSelected = current?.id === row.id;
+            const statusColor =
+              row.status === "completed"
+                ? "bg-green-100 text-green-800 border-green-300"
+                : row.status === "processing"
+                  ? "bg-blue-100 text-blue-800 border-blue-300 animate-pulse"
+                  : row.status === "failed"
+                    ? "bg-red-100 text-red-800 border-red-300"
+                    : "bg-amber-100 text-amber-800 border-amber-300";
+            const statusLabel =
+              row.status === "completed"
+                ? "সম্পন্ন"
+                : row.status === "processing"
+                  ? "চলছে"
+                  : row.status === "failed"
+                    ? "ব্যর্থ"
+                    : "অপেক্ষায়";
+
+            return (
+              <button
+                key={row.id}
+                onClick={() => openImport(row.id)}
+                className={`border rounded-lg px-3 py-2 text-sm flex items-center gap-2 transition-all ${
+                  isSelected
+                    ? "border-purple-600 bg-purple-50 shadow-xs ring-2 ring-purple-300"
+                    : "border-gray-200 hover:bg-gray-50 text-gray-700"
+                }`}
+              >
+                <span className="font-medium truncate max-w-[200px]" title={row.filename}>
+                  {row.filename}
+                </span>
+                <span className="text-gray-400">·</span>
+                <span className="text-xs text-gray-500">{row.subject}</span>
+                <span className="text-gray-400">·</span>
+                <span className="text-xs text-gray-600">
+                  {row.processed_pages}/{row.total_pages} page
+                </span>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor}`}>
+                  {statusLabel}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+    )}
 
     {current && <>
       <Card title={`OCR: ${current.filename}`}>

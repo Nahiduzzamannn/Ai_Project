@@ -24,3 +24,5 @@ Backend/backend/uploaded_pdfs/
 Backend/backend/uploaded_ocr/
 .runtime/
 !.env.example
+
+sample_test_questions/
