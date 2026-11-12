@@ -49,6 +49,13 @@ to load, starts one PostgreSQL-backed OCR worker, and runs FastAPI on port 8000.
 It stops the worker and its Docker container when the backend command exits.
 The llama.cpp port is published only on `127.0.0.1:8081`.
 
+**If a scan remains `queued`:** check that you started the backend with
+`run_scan_dev.py`. Starting only `python -m uvicorn app.main:app --port 8000
+--reload` runs the API but **does not start the OCR worker or llama.cpp**.
+Stop that API process and start the launcher above. Existing queued imports
+will be picked up automatically. `processing` means the worker has claimed the
+job; a CPU-based PDF page may then take several minutes.
+
 Frontend terminal, from `Frontend`:
 
 ```powershell

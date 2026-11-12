@@ -107,6 +107,7 @@ export default function OcrTab({ onSaved }) {
     {current && <>
       <Card title={`OCR: ${current.filename}`}>
         <p className="text-sm">{current.status === "queued" ? "অপেক্ষায় আছে" : current.status === "processing" ? "OCR চলছে" : current.status === "completed" ? "OCR সম্পন্ন" : "OCR ব্যর্থ হয়েছে"} · {current.processed_pages}/{current.total_pages} পৃষ্ঠা</p>
+        {current.status === "queued" && <p className="text-xs text-gray-500 mt-2">OCR worker চালু হলে কাজ শুরু হবে। দীর্ঘ সময় অপেক্ষায় থাকলে সার্ভার পরিচালনাকারীকে জানান।</p>}
         {current.status === "failed" && <Alert>{current.error || "OCR করা যায়নি। আবার চেষ্টা করুন।"}</Alert>}
       </Card>
       <Card title="Original file">
