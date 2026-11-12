@@ -25,7 +25,7 @@ A full-stack app for teachers: upload a textbook PDF, find a chapter, let a free
    - add an answer key for each set;
    - give a seed so the same paper can be rebuilt.
 
-6. **Scan printed questions.** In **Scan questions**, upload a PNG/JPG/WebP/TIFF image or PDF (up to 20 MB, 30 pages) and enter the subject. The app uses embedded PDF text when usable and local Tesseract OCR with Bengali + English data otherwise. It stores the original file and full extracted text, proposes question blocks, and lets the teacher correct them before saving to the question bank. Use **Copy** on a bank question or select questions and **Download Word draft** to edit them in Microsoft Word. Wrap corrected formulas in `$...$` or `$$...$$` for KaTeX rendering in the browser.
+6. **Scan printed questions.** In **Scan questions**, upload a PNG/JPG/WebP/TIFF image or PDF (up to 20 MB, 30 pages) and enter the subject. The upload becomes a background job with page progress. Every PDF page is rendered for OCR. The local Bangla PaddleOCR-VL-1.6 fine-tune runs once per page through llama.cpp; Tesseract `ben+eng` handles failed pages. The app stores the original file and full extracted text, proposes question blocks, and lets the teacher correct them before saving to the question bank. Use **Copy** on a bank question or select questions and **Download Word draft** to edit them in Microsoft Word. Wrap corrected formulas in `$...$` or `$$...$$` for KaTeX rendering in the browser.
 
 ## Tech Stack
 
@@ -38,7 +38,7 @@ A full-stack app for teachers: upload a textbook PDF, find a chapter, let a free
 | Embeddings | **fastembed** `BAAI/bge-small-en-v1.5`. It runs locally on CPU, is free, and needs no API key |
 | AI agent | **Groq** free API (`openai/gpt-oss-120b`), called through the OpenAI SDK. Any OpenAI-compatible API works, e.g. Google Gemini's free tier |
 | PDF | PyMuPDF (reading), ReportLab (question papers) |
-| OCR | Tesseract with `ben` + `eng` trained data, Pillow, pytesseract |
+| Scan OCR | Bangla PaddleOCR-VL-1.6 via local llama.cpp; Tesseract `ben+eng` fallback; PyMuPDF and Pillow |
 | Math display / Word | KaTeX in browser, python-docx export |
 
 ## Setup
@@ -93,16 +93,21 @@ If you start Elasticsearch after data already exists, copy that data in with `PO
 
 Install [Tesseract](https://tesseract-ocr.github.io/tessdoc/Installation.html) and the official [Bengali (`ben`) and English (`eng`) data](https://tesseract-ocr.github.io/tessdoc/Data-Files) first. On Windows the app also checks `C:\Program Files\Tesseract-OCR\tesseract.exe`. Put language files in Tesseract's `tessdata` directory, or in a local `.runtime/tessdata` directory at the repository root. OCR works offline once installed.
 
-```bash
+For Scan questions, download the local model and install Docker as described in
+[Backend/backend/SCAN_OCR_SETUP.md](Backend/backend/SCAN_OCR_SETUP.md). Then run:
+
+```powershell
 cd Backend
-myenv\Scripts\activate
-pip install -r backend/requirements.txt
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
 cd backend
-alembic upgrade head
-python -m uvicorn app.main:app --port 8000 --reload
+..\.venv\Scripts\python.exe -m alembic upgrade head
+..\.venv\Scripts\python.exe run_scan_dev.py
 ```
 
-The first upload downloads the embedding model (~70 MB), once.
+The first textbook upload downloads the embedding model (~70 MB), once. The
+Scan development launcher starts llama.cpp, the OCR worker, and FastAPI in one
+backend terminal.
 
 API docs: http://localhost:8000/docs
 
@@ -110,8 +115,8 @@ API docs: http://localhost:8000/docs
 
 ```bash
 cd Frontend
-npm install
-npm run dev
+npm.cmd install
+npm.cmd run dev
 ```
 
 Open http://localhost:5173. The header shows whether the API, Elasticsearch and the AI key are working.
@@ -139,8 +144,8 @@ Open http://localhost:5173. The header shows whether the API, Elasticsearch and 
 | GET | `/api/v1/questions/template.csv` | CSV template |
 | PUT/DELETE | `/api/v1/questions/{id}` | Edit or delete a question |
 | POST | `/api/v1/questions/paper` | Build the multi-set shuffled question paper PDF |
-| POST | `/api/v1/ocr/imports` | Upload image/PDF (`file`, `subject`, optional `force_ocr`) and retain source + extracted text |
-| GET | `/api/v1/ocr/imports` · `/ocr/imports/{id}` · `/ocr/imports/{id}/file` | List and review scans; view the original file |
+| POST | `/api/v1/ocr/imports` | Upload image/PDF (`file`, `subject`); return a queued import ID immediately |
+| GET | `/api/v1/ocr/imports` · `/ocr/imports/{id}` · `/ocr/imports/{id}/file` | List scans, check status and page progress, review results, and view the original file |
 | POST | `/api/v1/ocr/imports/{id}/questions` | Save corrected questions from a scan |
 | POST | `/api/v1/questions/word` | Download selected questions as an editable `.docx` |
 
@@ -157,7 +162,7 @@ Define osmosis.,short,,Movement of water across a membrane...,2,medium,Cell Biol
 
 ## Notes
 
-- OCR output needs teacher review, especially handwritten text and math expressions. Tesseract does not convert equations into LaTeX; enter LaTeX while correcting a question. If a PDF's embedded text is garbled, check **OCR all PDF pages** in the scan form.
+- OCR output needs teacher review, especially handwritten text and math expressions. The one-pass Bangla model and Tesseract do not guarantee equation transcription; enter LaTeX while correcting a question. Scan questions OCR runs on every PDF page, regardless of embedded text.
 - Free AI tiers have rate limits. `LLM_CONTEXT_CHARS` (default 12000) caps how much chapter text is sent per request.
 
 ## Security

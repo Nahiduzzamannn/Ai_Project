@@ -28,9 +28,10 @@ to shared object storage before putting the worker in a separate service.
    tokens (`--special`). Parse line text and eight 0–1000 coordinate tokens,
    map coordinates to page pixels, and sort lines in reading order. Preserve
    Unicode text and raw model output for diagnosis where useful.
-4. Apply rotation or image cleanup only when page inspection indicates a need.
-   Scale the input according to the model's documented spotting limit; avoid
-   expensive full-resolution images without evidence of benefit.
+4. Honor image EXIF orientation and PDF page rotation. Scale the input to the
+   model's documented spotting limit. Defer automatic deskew and denoising
+   until representative scans show a measurable benefit; never apply either
+   blindly.
 5. If llama.cpp is unavailable, times out, or returns empty, malformed, or
    unusable spotting output, run existing Tesseract `ben+eng` for that page.
    Record which engine produced each page. A superficially valid OCR result

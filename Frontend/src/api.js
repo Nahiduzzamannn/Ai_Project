@@ -66,15 +66,14 @@ export const api = {
     fd.append("file", file);
     return request(`/questions/upload${query({ topic })}`, { method: "POST", body: fd });
   },
-  createOcrImport: (file, subject, forceOcr) => {
+  createOcrImport: (file, subject) => {
     const fd = new FormData();
     fd.append("file", file);
     fd.append("subject", subject);
-    fd.append("force_ocr", String(forceOcr));
     return request("/ocr/imports", { method: "POST", body: fd });
   },
   listOcrImports: () => request("/ocr/imports"),
-  getOcrImport: (id) => request(`/ocr/imports/${id}`),
+  getOcrImport: (id, signal) => request(`/ocr/imports/${id}`, { signal }),
   ocrFileUrl: (id) => `${V1}/ocr/imports/${id}/file`,
   acceptOcrQuestions: (id, questions) => request(`/ocr/imports/${id}/questions`, json("POST", { questions })),
   exportWord: async (questionIds) => {

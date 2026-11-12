@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     # Max characters of chapter text sent to the LLM (keeps us under free-tier token limits)
     LLM_CONTEXT_CHARS: int = int(os.getenv("LLM_CONTEXT_CHARS", "12000"))
 
+    OCR_UPLOAD_DIR: str = os.getenv("OCR_UPLOAD_DIR", "uploaded_ocr")
+    OCR_LLAMA_URL: str = os.getenv("OCR_LLAMA_URL", "http://127.0.0.1:8081/v1/chat/completions")
+    OCR_LLAMA_MODEL: str = os.getenv("OCR_LLAMA_MODEL", "paddleocr-vl-1.6-bangla")
+    OCR_LLAMA_TIMEOUT: int = int(os.getenv("OCR_LLAMA_TIMEOUT", "300"))
+    OCR_WORKER_POLL_SECONDS: float = float(os.getenv("OCR_WORKER_POLL_SECONDS", "2"))
+    OCR_STALE_SECONDS: int = int(os.getenv("OCR_STALE_SECONDS", "900"))
+
     class Config:
         env_file = ".env"
         extra = "ignore"
