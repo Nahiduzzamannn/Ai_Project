@@ -117,9 +117,19 @@ def robust_json_loads(raw: str) -> dict:
     except Exception:
         pass
 
-    # 4. Aggressive fallback: escape any unescaped backslash and strip trailing commas
+    # 4. Repair unquoted or single-quoted JSON property keys
+    repaired_keys = re.sub(r'([{,\s])([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', repaired_no_commas)
+    repaired_keys = re.sub(r"'([a-zA-Z0-9_]+)'\s*:", r'"\1":', repaired_keys)
+    try:
+        return json.loads(repaired_keys, strict=False)
+    except Exception:
+        pass
+
+    # 5. Aggressive fallback: escape any unescaped backslash, fix keys, and strip trailing commas
     aggressive = re.sub(r'(?<!\\)\\(?![/\\"])', r'\\\\', text)
     aggressive = re.sub(r',\s*([\]}])', r'\1', aggressive)
+    aggressive = re.sub(r'([{,\s])([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', aggressive)
+    aggressive = re.sub(r"'([a-zA-Z0-9_]+)'\s*:", r'"\1":', aggressive)
     return json.loads(aggressive, strict=False)
 
 
@@ -272,7 +282,15 @@ def recognize_page(number: int, image: Image.Image, total_pages: int = 1) -> dic
                 log.warning("[%s] ⚠ Gemini Vision Key %d/%d failed after %.2fs: %s",
                             page_label, idx, len(api_keys), elapsed, gemini_error_msg)
                 if idx < len(api_keys):
-                    if "429" in gemini_error_msg or "resource_exhausted" in gemini_error_msg.lower():
+                    # Check for genuine HTTP 429 / Quota exhaustion (avoid matching character offsets like char 1429)
+                    is_rate_limit = (
+                        "http error 429" in gemini_error_msg.lower()
+                        or "status 429" in gemini_error_msg.lower()
+                        or "code 429" in gemini_error_msg.lower()
+                        or "resource_exhausted" in gemini_error_msg.lower()
+                        or "quota exceeded" in gemini_error_msg.lower()
+                    )
+                    if is_rate_limit:
                         log.info("[%s] Rate limit reached on Key %d/%d. Waiting 3s before switching...", page_label, idx, len(api_keys))
                         time.sleep(3.0)
                     log.info("[%s] Rotating to next Gemini API key...", page_label)
