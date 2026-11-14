@@ -34,9 +34,15 @@ class Settings(BaseSettings):
     # Max characters of chapter text sent to the LLM (keeps us under free-tier token limits)
     LLM_CONTEXT_CHARS: int = int(os.getenv("LLM_CONTEXT_CHARS", "12000"))
 
-    # Google Gemini Vision API for fast, cloud-based Scan Questions OCR
+    # Google Gemini Vision API for fast, cloud-based Scan Questions OCR (single key or comma-separated list)
     GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+
+    @property
+    def gemini_api_keys(self) -> list[str]:
+        if not self.GEMINI_API_KEY:
+            return []
+        return [k.strip() for k in self.GEMINI_API_KEY.split(",") if k.strip()]
 
     OCR_UPLOAD_DIR: str = os.getenv("OCR_UPLOAD_DIR", "uploaded_ocr")
     OCR_LLAMA_URL: str = os.getenv("OCR_LLAMA_URL", "http://127.0.0.1:8081/v1/chat/completions")

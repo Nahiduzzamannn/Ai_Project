@@ -116,8 +116,9 @@ def iter_page_images(path: Path):
             yield 1, ImageOps.exif_transpose(image).convert("RGB")
 
 
-def _gemini_vision_extract(image: Image.Image) -> dict:
-    if not settings.GEMINI_API_KEY:
+def _gemini_vision_extract(image: Image.Image, api_key: str | None = None) -> dict:
+    key_to_use = api_key or (settings.gemini_api_keys[0] if settings.gemini_api_keys else None)
+    if not key_to_use:
         raise RuntimeError("GEMINI_API_KEY is not configured")
 
     # Resize if extremely large to save bandwidth
@@ -130,7 +131,7 @@ def _gemini_vision_extract(image: Image.Image) -> dict:
     b64_image = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
     model_clean = (settings.GEMINI_MODEL or "gemini-3.5-flash").removeprefix("models/")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_clean}:generateContent?key={settings.GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_clean}:generateContent?key={key_to_use}"
     payload = {
         "contents": [{
             "parts": [
@@ -172,39 +173,55 @@ def recognize_page(number: int, image: Image.Image, total_pages: int = 1) -> dic
     gemini_error_msg = ""
     page_label = f"Page {number}/{total_pages}" if total_pages > 1 else f"Image (Page {number})"
 
-    # 1. Primary: Gemini Vision API (fast, high accuracy, Render-friendly)
-    if settings.GEMINI_API_KEY:
-        log.info("[%s] Sending to Gemini Vision API (%s)...", page_label, settings.GEMINI_MODEL)
-        t0 = time.time()
-        try:
-            data = _gemini_vision_extract(image)
-            elapsed = time.time() - t0
-            questions = data.get("questions") or []
-            cleaned_q = []
-            for q in questions:
-                if isinstance(q, dict) and q.get("text"):
-                    cleaned_q.append({
-                        "text": str(q["text"]).strip(),
-                        "qtype": q.get("qtype") if q.get("qtype") in ("mcq", "short", "broad", "true_false") else "short",
-                        "options": [str(o).strip() for o in q["options"]] if q.get("options") and isinstance(q["options"], list) else None,
-                        "answer": str(q["answer"]).strip() if q.get("answer") else None,
-                        "marks": float(q.get("marks") or (1.0 if q.get("qtype") == "mcq" else 2.0)),
-                        "difficulty": str(q.get("difficulty") or "medium"),
-                        "page": number,
-                    })
-            log.info("[%s] ✓ Gemini Vision completed in %.2fs (Extracted %d questions)",
-                     page_label, elapsed, len(cleaned_q))
-            return {
-                "page": number,
-                "text": str(data.get("full_text") or "").strip(),
-                "method": "gemini_vision",
-                "questions": cleaned_q,
-                "lines": [],
-            }
-        except Exception as gemini_err:
-            elapsed = time.time() - t0
-            gemini_error_msg = str(gemini_err)[:300]
-            log.warning("[%s] ⚠ Gemini Vision call failed after %.2fs: %s", page_label, elapsed, gemini_error_msg)
+    api_keys = settings.gemini_api_keys
+    # 1. Primary: Gemini Vision API (try all configured keys in sequence)
+    if api_keys:
+        for idx, key in enumerate(api_keys, 1):
+            key_masked = f"{key[:6]}...{key[-4:]}" if len(key) > 10 else "***"
+            log.info("[%s] Sending to Gemini Vision API (%s) using Key %d/%d (%s)...",
+                     page_label, settings.GEMINI_MODEL, idx, len(api_keys), key_masked)
+            t0 = time.time()
+            try:
+                data = _gemini_vision_extract(image, api_key=key)
+                elapsed = time.time() - t0
+                questions = data.get("questions") or []
+                cleaned_q = []
+                for q in questions:
+                    if isinstance(q, dict) and q.get("text"):
+                        raw_opts = q.get("options")
+                        valid_opts = [str(o).strip() for o in raw_opts if str(o).strip()] if raw_opts and isinstance(raw_opts, list) else None
+                        raw_qtype = q.get("qtype") if q.get("qtype") in ("mcq", "short", "broad", "true_false") else "short"
+                        # Degrade to short if Gemini classified as MCQ but missed/returned fewer than 2 options
+                        if raw_qtype == "mcq" and (not valid_opts or len(valid_opts) < 2):
+                            raw_qtype = "short"
+                            valid_opts = None
+
+                        cleaned_q.append({
+                            "text": str(q["text"]).strip(),
+                            "qtype": raw_qtype,
+                            "options": valid_opts,
+                            "answer": str(q["answer"]).strip() if q.get("answer") else None,
+                            "marks": float(q.get("marks") or (1.0 if raw_qtype == "mcq" else 2.0)),
+                            "difficulty": str(q.get("difficulty") or "medium"),
+                            "page": number,
+                        })
+                log.info("[%s] ✓ Gemini Vision completed in %.2fs with Key %d/%d (Extracted %d questions)",
+                         page_label, elapsed, idx, len(api_keys), len(cleaned_q))
+                return {
+                    "page": number,
+                    "text": str(data.get("full_text") or "").strip(),
+                    "method": "gemini_vision",
+                    "questions": cleaned_q,
+                    "lines": [],
+                }
+            except Exception as gemini_err:
+                elapsed = time.time() - t0
+                gemini_error_msg = str(gemini_err)[:300]
+                log.warning("[%s] ⚠ Gemini Vision Key %d/%d failed after %.2fs: %s",
+                            page_label, idx, len(api_keys), elapsed, gemini_error_msg)
+                if idx < len(api_keys):
+                    log.info("[%s] Rotating to next Gemini API key...", page_label)
+        log.warning("[%s] ⚠ All configured Gemini API keys failed or exhausted. Falling back to Tesseract OCR...", page_label)
     else:
         gemini_error_msg = "GEMINI_API_KEY is not set"
         log.warning("[%s] ⚠ GEMINI_API_KEY is not set. Switching to offline Tesseract...", page_label)

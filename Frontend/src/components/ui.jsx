@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 
@@ -77,6 +78,49 @@ export function Alert({ kind = "error", children, onClose }) {
           ✕
         </button>
       )}
+    </div>
+  );
+}
+
+export function Toast({ kind = "error", message, onClose, duration = 5000 }) {
+  useEffect(() => {
+    if (!message || !duration) return;
+    const timer = setTimeout(() => {
+      onClose?.();
+    }, duration);
+    return () => clearTimeout(timer);
+  }, [message, duration, onClose]);
+
+  if (!message) return null;
+
+  const styles =
+    kind === "error"
+      ? "bg-red-600 text-white shadow-lg shadow-red-200"
+      : kind === "success"
+        ? "bg-green-600 text-white shadow-lg shadow-green-200"
+        : kind === "warning"
+          ? "bg-amber-600 text-white shadow-lg shadow-amber-200"
+          : "bg-blue-600 text-white shadow-lg shadow-blue-200";
+
+  const icon =
+    kind === "error" ? "⚠️" : kind === "success" ? "✅" : kind === "warning" ? "⚠️" : "ℹ️";
+
+  return (
+    <div className="fixed top-5 right-5 z-50 max-w-sm sm:max-w-md pointer-events-auto transition-all">
+      <div className={`flex items-start gap-3 px-4 py-3 rounded-xl shadow-xl text-sm font-medium ${styles}`}>
+        <span className="text-base select-none">{icon}</span>
+        <div className="flex-1 whitespace-pre-wrap leading-snug">{message}</div>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-white/80 hover:text-white transition-opacity ml-1 text-sm font-bold p-0.5"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        )}
+      </div>
     </div>
   );
 }

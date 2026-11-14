@@ -43,6 +43,42 @@ class VisionExtractionTests(unittest.TestCase):
         self.assertEqual(page["questions"][0]["text"], "সালোকসংশ্লেষণ কী?")
         self.assertEqual(page["questions"][0]["options"], ["ক) প্রথম", "খ) দ্বিতীয়"])
 
+    def test_gemini_rotates_to_second_key_on_failure(self):
+        image = Image.new("RGB", (100, 100), "white")
+        mock_success = {
+            "full_text": "সফল টেক্সট",
+            "questions": [{"text": "প্রশ্ন ১", "qtype": "short", "options": None}],
+        }
+        with patch.object(ocr_service.settings, "GEMINI_API_KEY", "bad_key,good_key"):
+            def fake_extract(img, api_key=None):
+                if api_key == "bad_key":
+                    raise RuntimeError("Quota exceeded (429)")
+                return mock_success
+
+            with patch.object(ocr_service, "_gemini_vision_extract", side_effect=fake_extract):
+                page = ocr_service.recognize_page(1, image)
+
+        self.assertEqual(page["method"], "gemini_vision")
+        self.assertEqual(len(page["questions"]), 1)
+        self.assertEqual(page["questions"][0]["text"], "প্রশ্ন ১")
+
+    def test_mcq_without_options_degrades_to_short_to_prevent_422(self):
+        image = Image.new("RGB", (100, 100), "white")
+        mock_response = {
+            "full_text": "কোন অপশন নেই এমন প্রশ্ন",
+            "questions": [{
+                "text": "অপশনহীন প্রশ্ন",
+                "qtype": "mcq",
+                "options": [],
+                "answer": None,
+            }],
+        }
+        with patch.object(ocr_service, "_gemini_vision_extract", return_value=mock_response):
+            page = ocr_service.recognize_page(1, image)
+
+        self.assertEqual(page["questions"][0]["qtype"], "short")
+        self.assertIsNone(page["questions"][0]["options"])
+
     def test_tesseract_runs_when_gemini_fails(self):
         image = Image.new("RGB", (100, 100), "white")
         with patch.object(ocr_service, "_gemini_vision_extract", side_effect=RuntimeError("offline")), \

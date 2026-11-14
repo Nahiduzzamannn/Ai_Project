@@ -120,6 +120,13 @@
   - Enabled `wordWrap="LTR"` and `shaping=True` on all ReportLab styles.
   - Converted newlines to `<br/>` in passages/stems.
 
+### Phase 7: Multi-Key Rotation, Validation Toast & Teacher UX Fixes
+- [x] **Task 7.1:** Support comma-separated `GEMINI_API_KEY` with automatic key rotation and Tesseract fallback on exhausted quota.
+- [x] **Task 7.2:** Client-side pre-validation for MCQ options with top-right animated Toast and auto-scroll to the offending card.
+- [x] **Task 7.3:** Highlight invalid candidate card with red border, inline warning, and one-click "Short প্রশ্নে রূপান্তর করুন" quick fix.
+- [x] **Task 7.4:** Dynamic Subject (বিষয়) searchable combobox showing only previously used topics from the teacher's question bank.
+- [x] **Task 7.5:** Removed auto-selection of past scans on initial page load and cleared selection on new file select to prevent misleading status alerts.
+
 ---
 
 ## 5. Execution Log
@@ -132,3 +139,4 @@
 | 2026-11-14 | Phase 4 | Update `OcrTab.jsx` | Added MCQ answer selection, add/delete candidate buttons |
 | 2026-11-14 | Phase 5 | Tests & Build | All 6 unit tests passed; frontend build succeeded |
 | 2026-11-14 | Phase 6 | PDF Bengali Fonts & UI Polish | Bundled Kalpurush + uharfbuzz, 5s polling, KaTeX options preview |
+| 2026-11-15 | Phase 7 | Multi-Key Rotation & UX Overhaul | Comma-separated keys, Toast notifications, Combobox, clean selection |
