@@ -110,6 +110,16 @@
 - [x] **Task 5.2:** Run the test suite and verify end-to-end question extraction.
 - [x] **Task 5.3:** Added `google-genai` to `Backend/backend/requirements.txt`.
 
+### Phase 6: Bengali PDF Font Fix & UI Enhancements
+- [x] **Task 6.1:** Polling interval relaxed from 2s to 5s in `OcrTab.jsx` to reduce network/server load.
+- [x] **Task 6.2:** Upgraded file upload input in `OcrTab.jsx` to a clean dashed-border card with styled button, helper text, and selected file details.
+- [x] **Task 6.3:** Render KaTeX equations (`$...$`) inside MCQ radio options and question preview in `OcrTab.jsx`.
+- [x] **Task 6.4:** Fixed broken Bengali font / tofu boxes in Question Paper PDF generation (`paper_service.py`):
+  - Bundled `Kalpurush.ttf` into `Backend/backend/app/assets/fonts/`.
+  - Added `uharfbuzz` to `requirements.txt` for HarfBuzz complex text shaping (conjuncts, reph, kar placement).
+  - Enabled `wordWrap="LTR"` and `shaping=True` on all ReportLab styles.
+  - Converted newlines to `<br/>` in passages/stems.
+
 ---
 
 ## 5. Execution Log
@@ -121,3 +131,4 @@
 | 2026-11-14 | Phase 3 | Modernize `run_scan_dev.py` | Removed Docker container lifecycle; runs clean worker + uvicorn |
 | 2026-11-14 | Phase 4 | Update `OcrTab.jsx` | Added MCQ answer selection, add/delete candidate buttons |
 | 2026-11-14 | Phase 5 | Tests & Build | All 6 unit tests passed; frontend build succeeded |
+| 2026-11-14 | Phase 6 | PDF Bengali Fonts & UI Polish | Bundled Kalpurush + uharfbuzz, 5s polling, KaTeX options preview |

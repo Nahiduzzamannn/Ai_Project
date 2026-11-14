@@ -77,9 +77,9 @@ export default function OcrTab({ onSaved }) {
       } catch (err) {
         if (active && err.name !== "AbortError") setError(err.message);
       }
-      if (active) timer = setTimeout(poll, 2000);
+      if (active) timer = setTimeout(poll, 5000);
     }
-    timer = setTimeout(poll, 2000);
+    timer = setTimeout(poll, 5000);
     return () => { active = false; clearTimeout(timer); controller?.abort(); };
   }, [activeImportId, activeImportStatus]);
 
@@ -175,10 +175,30 @@ export default function OcrTab({ onSaved }) {
     <Card title="ছবি বা PDF থেকে প্রশ্ন" subtitle="বাংলা ও ইংরেজি OCR; সংরক্ষণের আগে সব প্রশ্ন দেখে নিন">
       <form onSubmit={upload} className="grid md:grid-cols-[1fr_12rem_auto] gap-3 items-end">
         <Field label="Question image / PDF (20 MB, PDF সর্বোচ্চ 30 পৃষ্ঠা)">
-          <input className={inputClass} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.tif,.tiff" onChange={(e) => setFile(e.target.files?.[0] || null)} required />
+          <div className="border border-dashed border-gray-300 rounded-lg p-2 bg-gray-50/60 hover:bg-gray-50 hover:border-blue-400 transition-colors">
+            <input
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.webp,.tif,.tiff"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              required
+              className="block w-full text-sm text-gray-500
+                file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0
+                file:text-xs file:font-semibold file:bg-blue-600 file:text-white
+                hover:file:bg-blue-700 file:cursor-pointer cursor-pointer focus:outline-none"
+            />
+            {!file ? (
+              <span className="block text-xs text-gray-400 mt-1 pl-1">
+                কোনো ফাইল নির্বাচন করা হয়নি (PDF বা ছবি নির্বাচন করুন)
+              </span>
+            ) : (
+              <span className="block text-xs text-blue-700 font-medium mt-1 pl-1 truncate">
+                নির্বাচিত ফাইল: {file.name} ({(file.size / (1024 * 1024)).toFixed(2)} MB)
+              </span>
+            )}
+          </div>
         </Field>
         <Field label="বিষয়"><input className={inputClass} value={subject} onChange={(e) => setSubject(e.target.value)} required /></Field>
-        <Button type="submit" disabled={!file || !subject.trim()} loading={busy}>OCR করুন</Button>
+        <Button type="submit" disabled={!file || !subject.trim()} loading={busy} className="h-[42px]">OCR করুন</Button>
       </form>
       <p className="text-xs text-gray-500 mt-3">পরিষ্কার, সোজা ছবি ভালো ফল দেয়। গণিতের সূত্র OCR-এ ভুল হতে পারে; $...$ দিয়ে LaTeX লিখে browser preview দেখুন।</p>
       <div className="mt-3 space-y-2">
@@ -294,16 +314,26 @@ export default function OcrTab({ onSaved }) {
                 {q.optionsText.split("\n").map((o) => o.trim()).filter(Boolean).length > 0 && (
                   <div className="space-y-1">
                     <span className="text-xs font-semibold text-gray-600">সঠিক উত্তর নির্বাচন করুন (ঐচ্ছিক):</span>
-                    <div className="grid sm:grid-cols-2 gap-1.5">
+                    <div className="grid sm:grid-cols-2 gap-2">
                       {q.optionsText.split("\n").map((o) => o.trim()).filter(Boolean).map((opt, optIdx) => (
-                        <label key={optIdx} className="flex items-center gap-2 text-sm bg-gray-50 border rounded px-2.5 py-1.5 cursor-pointer hover:bg-gray-100">
+                        <label
+                          key={optIdx}
+                          className={`flex items-start gap-2 text-sm rounded-lg border p-2.5 cursor-pointer transition-colors ${
+                            q.answer === opt
+                              ? "bg-blue-50 border-blue-400 text-blue-950 ring-1 ring-blue-300"
+                              : "bg-gray-50 border-gray-200 hover:bg-gray-100 text-gray-800"
+                          }`}
+                        >
                           <input
                             type="radio"
                             name={`answer-${q.key}`}
                             checked={q.answer === opt}
                             onChange={() => update(q.key, "answer", opt)}
+                            className="mt-0.5"
                           />
-                          <span className="truncate">{opt}</span>
+                          <span className="flex-1 break-words">
+                            <RichText text={opt} />
+                          </span>
                         </label>
                       ))}
                     </div>
@@ -311,7 +341,19 @@ export default function OcrTab({ onSaved }) {
                 )}
               </div>
             )}
-            <div className="text-sm bg-gray-50 p-2 rounded"><RichText text={q.text} /></div>
+            <div className="text-sm bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-1.5">
+              <div className="font-medium text-gray-900"><RichText text={q.text} /></div>
+              {q.qtype === "mcq" && q.optionsText && (
+                <ol className="ml-5 text-sm text-gray-700 list-[lower-alpha] space-y-1">
+                  {q.optionsText.split("\n").map((o) => o.trim()).filter(Boolean).map((opt, optIdx) => (
+                    <li key={optIdx} className={q.answer === opt ? "font-semibold text-green-700" : ""}>
+                      <RichText text={opt} />
+                      {q.answer === opt && <span className="ml-2 text-xs text-green-600 font-normal">✓ (সঠিক উত্তর)</span>}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
           </div>)}
           <div className="flex gap-3">
             <Button onClick={save} loading={busy}>নির্বাচিত প্রশ্ন Question Bank-এ রাখুন</Button>

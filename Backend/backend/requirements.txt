@@ -12,6 +12,7 @@ openai
 fastembed
 elasticsearch>=8.15,<9
 reportlab
+uharfbuzz
 Pillow
 pytesseract
 google-genai
