@@ -26,7 +26,7 @@ function SubjectCombobox({ value, onChange, topics = [] }) {
       <div className="relative">
         <input
           type="text"
-          className={inputClass}
+          className={`${inputClass} pr-8`}
           value={value}
           onChange={(e) => {
             onChange(e.target.value);
@@ -35,14 +35,14 @@ function SubjectCombobox({ value, onChange, topics = [] }) {
           onFocus={() => {
             if (topics.length > 0) setOpen(true);
           }}
-          placeholder="বিষয় লিখুন বা নির্বাচন করুন..."
+          placeholder="যেমন: বাংলা"
           required
         />
         {topics.length > 0 && (
           <button
             type="button"
             onClick={() => setOpen((prev) => !prev)}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs p-1"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs p-1.5 focus:outline-none"
             title="পূর্ববর্তী বিষয়ের তালিকা"
           >
             ▼
@@ -51,13 +51,13 @@ function SubjectCombobox({ value, onChange, topics = [] }) {
       </div>
 
       {open && topics.length > 0 && (
-        <div className="absolute left-0 right-0 top-full mt-1 z-30 max-h-52 overflow-auto bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-48 overflow-y-auto bg-white border border-gray-300 rounded-lg shadow-xl py-1">
           {filtered.length > 0 ? (
             filtered.map((t) => (
               <button
                 key={t}
                 type="button"
-                className={`w-full text-left px-3 py-1.5 text-sm hover:bg-blue-50 transition-colors ${
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors ${
                   value === t ? "bg-blue-50 font-semibold text-blue-700" : "text-gray-700"
                 }`}
                 onClick={() => {
@@ -69,7 +69,7 @@ function SubjectCombobox({ value, onChange, topics = [] }) {
               </button>
             ))
           ) : (
-            <div className="px-3 py-1.5 text-xs text-gray-400 italic">
+            <div className="px-3 py-2 text-xs text-gray-400 italic">
               নতুন বিষয় হিসেবে যোগ হবে: "{value}"
             </div>
           )}
@@ -379,7 +379,7 @@ export default function OcrTab({ onSaved }) {
       )}
 
       <Card title="ছবি বা PDF থেকে প্রশ্ন" subtitle="বাংলা ও ইংরেজি OCR; সংরক্ষণের আগে সব প্রশ্ন দেখে নিন">
-        <form onSubmit={upload} className="grid md:grid-cols-[1fr_12rem_auto] gap-3 items-end">
+        <form onSubmit={upload} className="grid md:grid-cols-[1fr_13.5rem_auto] gap-3 items-end">
           <Field label="Question image / PDF (20 MB, PDF সর্বোচ্চ 30 পৃষ্ঠা)">
             <div className="border border-dashed border-gray-300 rounded-lg p-2 bg-gray-50/60 hover:bg-gray-50 hover:border-blue-400 transition-colors">
               <input

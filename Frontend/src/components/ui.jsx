@@ -16,11 +16,11 @@ export function RichText({ text = "" }) {
   })}</span>;
 }
 
-export function Card({ title, subtitle, actions, children }) {
+export function Card({ title, subtitle, actions, children, className = "" }) {
   return (
-    <section className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+    <section className={`bg-white rounded-2xl shadow-lg border border-gray-100 ${className}`}>
       {title && (
-        <div className="bg-linear-to-r from-blue-500 to-purple-600 px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
+        <div className="bg-linear-to-r from-blue-500 to-purple-600 rounded-t-2xl px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h2 className="text-lg font-semibold text-white">{title}</h2>
             {subtitle && <p className="text-blue-50 text-sm mt-0.5">{subtitle}</p>}
