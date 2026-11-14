@@ -72,9 +72,55 @@ CRITICAL RULES:
    - (ক) জ্ঞানমূলক & (খ) অনুধাবনমূলক: set qtype='short'.
    - (গ) প্রয়োগমূলক & (ঘ) উচ্চতর দক্ষতামূলক: set qtype='broad'.
 5. Math and Science Formulas:
-   - Format any formulas, superscripts, fractions, chemical reactions in LaTeX KaTeX notation (e.g. '$x^2 + y^2 = z^2$', '$\\frac{a}{b}$', '$H_2O$').
+   - Format any formulas, superscripts, fractions, chemical reactions in LaTeX KaTeX notation (e.g. '$x^2 + y^2 = z^2$', '$\\frac{a}{b}$', '$H_2O$'). In JSON strings, use valid escaping for backslashes (e.g. '\\\\sqrt', '\\\\frac').
 6. For non-MCQ questions (short, broad), 'options' MUST be null.
 7. Return ONLY valid JSON, with no markdown code fences."""
+
+
+def robust_json_loads(raw: str) -> dict:
+    """Robustly parse LLM JSON responses, repairing LaTeX backslashes, trailing commas, and markdown fences."""
+    if not raw or not isinstance(raw, str):
+        return {}
+
+    text = raw.strip()
+    if "```" in text:
+        match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text, re.IGNORECASE)
+        if match:
+            text = match.group(1).strip()
+        else:
+            text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+            text = re.sub(r"\s*```$", "", text).strip()
+
+    # 1. Direct parse attempt
+    try:
+        return json.loads(text, strict=False)
+    except Exception:
+        pass
+
+    # 2. Repair unescaped LaTeX backslashes in JSON strings:
+    # Match any single backslash NOT preceded by another backslash that is:
+    # - followed by [bfnrtu] and a letter (e.g. \frac, \times, \theta, \beta, \rho, \nu, \uparrow)
+    # - followed by any ASCII letter other than [bfnrtu] (e.g. \sqrt, \alpha, \cdot, \pm, \approx, etc.)
+    # - followed by non-escape characters / symbols (e.g. \{, \}, \$, \_, \%, \!)
+    pattern = re.compile(r'(?<!\\)\\(?=(?:[bfnrtu][a-zA-Z]|[ac-eg-mo-qsv-zAC-EG-MO-QSV-Z]|[^"\\/bfnrtu\s]))')
+    repaired = pattern.sub(r'\\\\', text)
+
+    try:
+        return json.loads(repaired, strict=False)
+    except Exception:
+        pass
+
+    # 3. Strip trailing commas before closing } or ]
+    repaired_no_commas = re.sub(r',\s*([\]}])', r'\1', repaired)
+    try:
+        return json.loads(repaired_no_commas, strict=False)
+    except Exception:
+        pass
+
+    # 4. Aggressive fallback: escape any unescaped backslash and strip trailing commas
+    aggressive = re.sub(r'(?<!\\)\\(?![/\\"])', r'\\\\', text)
+    aggressive = re.sub(r',\s*([\]}])', r'\1', aggressive)
+    return json.loads(aggressive, strict=False)
 
 
 def validate_upload(filename: str, raw: bytes) -> int:
@@ -157,8 +203,8 @@ def _gemini_vision_extract(image: Image.Image, api_key: str | None = None) -> di
                 candidate = data["candidates"][0]
                 part = candidate["content"]["parts"][0]
                 raw_json = part["text"].strip()
-                return json.loads(raw_json)
-        except (HTTPError, URLError, TimeoutError, KeyError, IndexError, json.JSONDecodeError) as exc:
+                return robust_json_loads(raw_json)
+        except (HTTPError, URLError, TimeoutError, KeyError, IndexError, json.JSONDecodeError, ValueError) as exc:
             is_transient = "503" in str(exc) or "timeout" in str(exc).lower()
             if attempt == 0 and is_transient:
                 log.info("Gemini transient issue (%s), retrying in 2s...", exc)
@@ -226,6 +272,9 @@ def recognize_page(number: int, image: Image.Image, total_pages: int = 1) -> dic
                 log.warning("[%s] ⚠ Gemini Vision Key %d/%d failed after %.2fs: %s",
                             page_label, idx, len(api_keys), elapsed, gemini_error_msg)
                 if idx < len(api_keys):
+                    if "429" in gemini_error_msg or "resource_exhausted" in gemini_error_msg.lower():
+                        log.info("[%s] Rate limit reached on Key %d/%d. Waiting 3s before switching...", page_label, idx, len(api_keys))
+                        time.sleep(3.0)
                     log.info("[%s] Rotating to next Gemini API key...", page_label)
         log.warning("[%s] ⚠ All configured Gemini API keys failed or exhausted. Falling back to Tesseract OCR...", page_label)
     else:

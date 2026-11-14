@@ -71,9 +71,12 @@ def process_import(import_id: int) -> None:
                 row.pages = [*row.pages, result]
                 row.processed_pages = len(row.pages)
                 row.heartbeat_at = utcnow()
-            # Gentle pacing to avoid burst rate limiters on multi-page PDFs
+            # Pacing between pages to strictly respect Gemini API rate limits
             if number < total_pages:
-                time.sleep(1.0)
+                delay = getattr(settings, "OCR_PAGE_DELAY_SECONDS", 10.0)
+                if delay > 0:
+                    log.info("Pacing next page request (waiting %.1fs)...", delay)
+                    time.sleep(delay)
         with SessionLocal.begin() as db:
             row = db.get(OcrImport, import_id)
             if row.processed_pages != row.total_pages:

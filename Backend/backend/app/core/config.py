@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     OCR_LLAMA_TIMEOUT: int = int(os.getenv("OCR_LLAMA_TIMEOUT", "300"))
     OCR_WORKER_POLL_SECONDS: float = float(os.getenv("OCR_WORKER_POLL_SECONDS", "2"))
     OCR_STALE_SECONDS: int = int(os.getenv("OCR_STALE_SECONDS", "900"))
+    # Delay between consecutive page OCR calls to strictly respect API rate limits
+    OCR_PAGE_DELAY_SECONDS: float = float(os.getenv("OCR_PAGE_DELAY_SECONDS", "10.0"))
 
     class Config:
         env_file = ".env"

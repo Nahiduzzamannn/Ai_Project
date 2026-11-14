@@ -88,6 +88,19 @@ class VisionExtractionTests(unittest.TestCase):
         self.assertEqual(page["text"], "fallback text")
         fallback.assert_called_once()
 
+    def test_robust_json_loads_repairs_latex_and_trailing_commas(self):
+        # 1. Unescaped LaTeX backslashes that crash standard json.loads
+        raw_latex = r'{"full_text": "Formula: $\frac{a}{b} + \times + \theta + \sqrt{2}$", "questions": [{"text": "$9\sqrt{2}$", "qtype": "mcq", "options": ["$6\sqrt{2}$", "$9\sqrt{2}$"]}]}'
+        parsed = ocr_service.robust_json_loads(raw_latex)
+        self.assertIn(r"\sqrt{2}", parsed["full_text"])
+        self.assertEqual(parsed["questions"][0]["options"][0], r"$6\sqrt{2}$")
+
+        # 2. Markdown fences with trailing commas
+        raw_fenced = "```json\n" + r'{"full_text": "Test", "questions": [{"text": "Q1", "options": ["a", "b",],},],}' + "\n```"
+        parsed_fenced = ocr_service.robust_json_loads(raw_fenced)
+        self.assertEqual(parsed_fenced["full_text"], "Test")
+        self.assertEqual(len(parsed_fenced["questions"]), 1)
+
     def test_question_number_is_cleaned_for_tesseract_fallback(self):
         pages = [{"page": 1, "text": "১. প্রশ্ন কী?\nক) প্রথম\nখ) দ্বিতীয়"}]
         candidate = ocr_service.split_questions(pages)[0]
