@@ -1,9 +1,13 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv, find_dotenv
 from pydantic_settings import BaseSettings
 
-# Load .env as early as possible
+# Load .env from current dir, ancestors, or explicit backend dir
 load_dotenv(find_dotenv())
+backend_env = Path(__file__).resolve().parents[2] / ".env"
+if backend_env.exists():
+    load_dotenv(backend_env)
 
 class Settings(BaseSettings):
     APP_NAME: str = "AI PDF RAG Backend"
@@ -29,6 +33,10 @@ class Settings(BaseSettings):
     LLM_MODEL: str = os.getenv("LLM_MODEL", "openai/gpt-oss-120b")
     # Max characters of chapter text sent to the LLM (keeps us under free-tier token limits)
     LLM_CONTEXT_CHARS: int = int(os.getenv("LLM_CONTEXT_CHARS", "12000"))
+
+    # Google Gemini Vision API for fast, cloud-based Scan Questions OCR
+    GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
     OCR_UPLOAD_DIR: str = os.getenv("OCR_UPLOAD_DIR", "uploaded_ocr")
     OCR_LLAMA_URL: str = os.getenv("OCR_LLAMA_URL", "http://127.0.0.1:8081/v1/chat/completions")

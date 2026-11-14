@@ -85,7 +85,13 @@ export default function OcrTab({ onSaved }) {
 
   function showImport(row) {
     setCurrent(row);
-    setCandidates((row.candidates || []).map((q, i) => ({ ...q, key: i, selected: true, optionsText: (q.options || []).join("\n") })));
+    setCandidates((row.candidates || []).map((q, i) => ({
+      ...q,
+      key: i,
+      selected: true,
+      optionsText: (q.options || []).join("\n"),
+      answer: q.answer || null,
+    })));
     setImports((prev) =>
       prev.map((item) =>
         item.id === row.id
@@ -126,14 +132,36 @@ export default function OcrTab({ onSaved }) {
     setCandidates((items) => items.map((q) => q.key === key ? { ...q, [field]: value } : q));
   }
 
+  function addCandidate() {
+    setCandidates((items) => [
+      ...items,
+      {
+        key: Date.now(),
+        page: current?.total_pages || 1,
+        text: "",
+        qtype: "short",
+        optionsText: "",
+        selected: true,
+        answer: null,
+      },
+    ]);
+  }
+
+  function removeCandidate(key) {
+    setCandidates((items) => items.filter((q) => q.key !== key));
+  }
+
   async function save() {
-    const selected = candidates.filter((q) => q.selected);
+    const selected = candidates.filter((q) => q.selected && q.text.trim());
     if (!selected.length) return setError("Save করার জন্য অন্তত একটি প্রশ্ন বেছে নিন।");
     const questions = selected.map((q) => ({
-      text: q.text.trim(), qtype: q.qtype,
+      text: q.text.trim(),
+      qtype: q.qtype,
       options: q.qtype === "mcq" ? q.optionsText.split("\n").map((o) => o.trim()).filter(Boolean) : null,
-      answer: null, marks: q.qtype === "mcq" ? 1 : 2,
-      difficulty: "medium", topic: current.subject,
+      answer: q.answer ? q.answer.trim() : null,
+      marks: q.marks || (q.qtype === "mcq" ? 1 : 2),
+      difficulty: q.difficulty || "medium",
+      topic: current.subject,
     }));
     setBusy(true); setError("");
     try {
@@ -233,23 +261,70 @@ export default function OcrTab({ onSaved }) {
       {current.status === "completed" && <>
       <Card title={`Review: ${current.filename}`} subtitle="Question bank-এ যাওয়ার আগে লেখা, option ও সূত্র ঠিক করুন">
         <div className="space-y-4">
-          {candidates.map((q) => <div key={q.key} className="border rounded-xl p-4 space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <label className="text-sm font-semibold"><input type="checkbox" className="mr-2" checked={q.selected} onChange={(e) => update(q.key, "selected", e.target.checked)} />পৃষ্ঠা {q.page} · প্রশ্ন {q.key + 1}</label>
-              <select className={inputClass} value={q.qtype} onChange={(e) => update(q.key, "qtype", e.target.value)}>
-                <option value="short">Short</option><option value="broad">Broad</option><option value="mcq">MCQ</option><option value="true_false">True/False</option>
-              </select>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-500">{candidates.length} টি সম্ভাব্য প্রশ্ন পাওয়া গেছে</span>
+            <Button variant="secondary" onClick={addCandidate}>+ প্রশ্ন যোগ করুন</Button>
+          </div>
+          {candidates.map((q) => <div key={q.key} className="border rounded-xl p-4 space-y-2 relative bg-white">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <label className="text-sm font-semibold flex items-center">
+                <input type="checkbox" className="mr-2" checked={q.selected} onChange={(e) => update(q.key, "selected", e.target.checked)} />
+                পৃষ্ঠা {q.page} · প্রশ্ন {q.key + 1}
+              </label>
+              <div className="flex items-center gap-2">
+                <select className={inputClass} value={q.qtype} onChange={(e) => update(q.key, "qtype", e.target.value)}>
+                  <option value="short">Short</option><option value="broad">Broad</option><option value="mcq">MCQ</option><option value="true_false">True/False</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => removeCandidate(q.key)}
+                  className="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded border border-red-200"
+                  title="Remove this question"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
             <textarea className={inputClass} rows={3} value={q.text} onChange={(e) => update(q.key, "text", e.target.value)} />
-            {q.qtype === "mcq" && <Field label="Options (one per line)"><textarea className={inputClass} rows={4} value={q.optionsText} onChange={(e) => update(q.key, "optionsText", e.target.value)} /></Field>}
+            {q.qtype === "mcq" && (
+              <div className="space-y-2">
+                <Field label="Options (one per line)">
+                  <textarea className={inputClass} rows={4} value={q.optionsText} onChange={(e) => update(q.key, "optionsText", e.target.value)} />
+                </Field>
+                {q.optionsText.split("\n").map((o) => o.trim()).filter(Boolean).length > 0 && (
+                  <div className="space-y-1">
+                    <span className="text-xs font-semibold text-gray-600">সঠিক উত্তর নির্বাচন করুন (ঐচ্ছিক):</span>
+                    <div className="grid sm:grid-cols-2 gap-1.5">
+                      {q.optionsText.split("\n").map((o) => o.trim()).filter(Boolean).map((opt, optIdx) => (
+                        <label key={optIdx} className="flex items-center gap-2 text-sm bg-gray-50 border rounded px-2.5 py-1.5 cursor-pointer hover:bg-gray-100">
+                          <input
+                            type="radio"
+                            name={`answer-${q.key}`}
+                            checked={q.answer === opt}
+                            onChange={() => update(q.key, "answer", opt)}
+                          />
+                          <span className="truncate">{opt}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="text-sm bg-gray-50 p-2 rounded"><RichText text={q.text} /></div>
           </div>)}
-          <Button onClick={save} loading={busy}>নির্বাচিত প্রশ্ন Question Bank-এ রাখুন</Button>
+          <div className="flex gap-3">
+            <Button onClick={save} loading={busy}>নির্বাচিত প্রশ্ন Question Bank-এ রাখুন</Button>
+            <Button variant="secondary" onClick={addCandidate}>+ প্রশ্ন যোগ করুন</Button>
+          </div>
         </div>
       </Card>
       <Card title="পুরো extracted text" subtitle="কোনো প্রশ্ন বাদ পড়লে এখান থেকে কপি করে Question Bank-এ যোগ করুন">
         <div className="space-y-4">{current.pages.map((page) => <div key={page.page}>
-          <div className="flex justify-between text-sm font-semibold mb-1"><span>পৃষ্ঠা {page.page} · {page.method === "paddle_bangla" ? "PaddleOCR" : page.method === "tesseract" ? "Tesseract fallback" : page.method}</span><button className="text-blue-600" onClick={() => navigator.clipboard.writeText(page.text)}>Copy text</button></div>
+          <div className="flex justify-between text-sm font-semibold mb-1">
+            <span>পৃষ্ঠা {page.page} · {page.method === "gemini_vision" ? "Gemini Vision" : page.method === "paddle_bangla" ? "PaddleOCR" : page.method === "tesseract" ? "Tesseract fallback" : page.method}</span>
+            <button className="text-blue-600" onClick={() => navigator.clipboard.writeText(page.text)}>Copy text</button>
+          </div>
           {page.method === "failed" && <Alert>{page.error || "এই পৃষ্ঠার লেখা পড়া যায়নি।"}</Alert>}
           <pre className="whitespace-pre-wrap text-sm bg-gray-50 border rounded p-3 max-h-80 overflow-auto">{page.text}</pre>
         </div>)}</div>

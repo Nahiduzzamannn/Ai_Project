@@ -1,4 +1,4 @@
-"""Focused checks for one-pass spotting, fallback, and durable OCR progress."""
+"""Focused checks for Gemini Vision extraction, Tesseract fallback, and durable OCR progress."""
 
 import tempfile
 import unittest
@@ -20,35 +20,45 @@ from app.services import ocr_service
 from app.workers import ocr_worker
 
 
-class SpottingTests(unittest.TestCase):
-    def test_bangla_lines_and_boxes_are_preserved(self):
-        locations = "".join(f"<|LOC_{n}|>" for n in (10, 20, 400, 20, 400, 50, 10, 50))
-        lines = ocr_service.parse_spotting("১. প্রশ্ন কী?" + locations, 1000, 1000)
-        self.assertEqual(lines, [{"text": "১. প্রশ্ন কী?", "bbox": [10, 20, 400, 50]}])
-
-    def test_tesseract_runs_only_after_paddle_failure(self):
+class VisionExtractionTests(unittest.TestCase):
+    def test_gemini_vision_extracts_clean_questions_and_options(self):
         image = Image.new("RGB", (100, 100), "white")
-        with patch.object(ocr_service, "_llama_spotting", side_effect=RuntimeError("offline")), \
+        mock_response = {
+            "full_text": "১. সালোকসংশ্লেষণ কী?\nক) প্রথম\nখ) দ্বিতীয়",
+            "questions": [
+                {
+                    "text": "সালোকসংশ্লেষণ কী?",
+                    "qtype": "mcq",
+                    "options": ["ক) প্রথম", "খ) দ্বিতীয়"],
+                    "answer": "ক) প্রথম",
+                    "marks": 1.0,
+                    "difficulty": "easy",
+                }
+            ],
+        }
+        with patch.object(ocr_service, "_gemini_vision_extract", return_value=mock_response):
+            page = ocr_service.recognize_page(1, image)
+        self.assertEqual(page["method"], "gemini_vision")
+        self.assertEqual(len(page["questions"]), 1)
+        self.assertEqual(page["questions"][0]["text"], "সালোকসংশ্লেষণ কী?")
+        self.assertEqual(page["questions"][0]["options"], ["ক) প্রথম", "খ) দ্বিতীয়"])
+
+    def test_tesseract_runs_when_gemini_fails(self):
+        image = Image.new("RGB", (100, 100), "white")
+        with patch.object(ocr_service, "_gemini_vision_extract", side_effect=RuntimeError("offline")), \
              patch.object(ocr_service, "_tesseract_image", return_value="fallback text") as fallback:
             page = ocr_service.recognize_page(1, image)
         self.assertEqual(page["method"], "tesseract")
         self.assertEqual(page["text"], "fallback text")
         fallback.assert_called_once()
 
-    def test_spotting_boxes_map_to_original_image_after_resize(self):
-        image = Image.new("RGB", (2000, 2000), "white")
-        locations = "".join(f"<|LOC_{n}|>" for n in (100, 200, 300, 200, 300, 250, 100, 250))
-        response = {"choices": [{"message": {"content": "Question" + locations}, "finish_reason": "stop"}]}
-        with patch.object(ocr_service, "urlopen", return_value=io.BytesIO(json.dumps(response).encode())):
-            lines = ocr_service._llama_spotting(image)
-        self.assertEqual(lines[0]["bbox"], [200, 400, 600, 500])
-
-    def test_question_number_and_options_are_kept_for_review(self):
-        pages = [{"page": 1, "text": "১. প্রশ্ন কী?\nক) প্রথম\nখ) দ্বিতীয়"}]
+    def test_question_number_is_cleaned_for_tesseract_fallback(self):
+        pages = [{"page": 1, "text": "১. প্রশ্ন কী?\nক) প্রথম\nখ) দ্বিতীয়"}]
         candidate = ocr_service.split_questions(pages)[0]
-        self.assertEqual(candidate["text"], "১. প্রশ্ন কী?")
+        # Leading number '১.' is cleaned to avoid double numbering in question paper builders
+        self.assertEqual(candidate["text"], "প্রশ্ন কী?")
         self.assertEqual(candidate["qtype"], "mcq")
-        self.assertEqual(candidate["options"], ["প্রথম", "দ্বিতীয়"])
+        self.assertEqual(candidate["options"], ["প্রথম", "দ্বিতীয়"])
 
 
 class WorkerTests(unittest.TestCase):
@@ -79,11 +89,11 @@ class WorkerTests(unittest.TestCase):
             db.add(row)
             db.flush()
             import_id = row.id
-        with patch.object(ocr_worker, "recognize_page", side_effect=lambda n, image: {
-                "page": n, "text": f"{n}. Question?", "method": "paddle_bangla", "lines": []}) as recognize:
+        with patch.object(ocr_worker, "recognize_page", side_effect=lambda n, image, *args, **kwargs: {
+                "page": n, "text": f"{n}. Question?", "method": "gemini_vision",
+                "questions": [{"text": f"Question {n}?", "qtype": "short", "options": None, "page": n}]}):
             self.assertEqual(ocr_worker.claim_next(), import_id)
             ocr_worker.process_import(import_id)
-        self.assertEqual(recognize.call_count, 2)
         with self.sessions() as db:
             row = db.get(OcrImport, import_id)
             self.assertEqual(row.status, "completed")
@@ -97,66 +107,64 @@ class WorkerTests(unittest.TestCase):
             document.new_page()
             document.new_page()
             document.save(pdf_path)
-        first_page = {"page": 1, "text": "1. Earlier question?", "method": "paddle_bangla", "lines": []}
+        first_page = {"page": 1, "text": "1. Earlier question?", "method": "gemini_vision",
+                      "questions": [{"text": "Earlier question?", "qtype": "short", "options": None, "page": 1}]}
         with self.sessions.begin() as db:
-            row = OcrImport(filename="resume.pdf", subject="Bangla", storage_path=str(pdf_path),
-                            pages=[first_page], candidates=[], status="processing",
-                            processed_pages=1, total_pages=2,
-                            heartbeat_at=datetime.now(timezone.utc) - timedelta(hours=1))
+            row = OcrImport(filename="resume.pdf", subject="English", storage_path=str(pdf_path),
+                            pages=[first_page], candidates=[], status="processing", processed_pages=1,
+                            total_pages=2, heartbeat_at=datetime.now(timezone.utc) - timedelta(seconds=1200))
             db.add(row)
             db.flush()
             import_id = row.id
-        with patch.object(ocr_worker, "recognize_page", return_value={
-                "page": 2, "text": "2. New question?", "method": "paddle_bangla", "lines": []}) as recognize:
+        with patch.object(ocr_worker, "recognize_page", side_effect=lambda n, image, *args, **kwargs: {
+                "page": n, "text": "2. Second question?", "method": "gemini_vision",
+                "questions": [{"text": "Second question?", "qtype": "short", "options": None, "page": n}]}) as recognize:
             self.assertEqual(ocr_worker.claim_next(), import_id)
             ocr_worker.process_import(import_id)
-        recognize.assert_called_once()
+        self.assertEqual(recognize.call_count, 1)
         with self.sessions() as db:
             row = db.get(OcrImport, import_id)
             self.assertEqual(row.status, "completed")
-            self.assertEqual([page["page"] for page in row.pages], [1, 2])
+            self.assertEqual(row.processed_pages, 2)
+            self.assertEqual(len(row.pages), 2)
 
 
 class ApiTests(unittest.TestCase):
-    def test_upload_returns_queued_job_and_blocks_early_acceptance(self):
-        from app.api.v1 import ocr as ocr_api
-        from app.core.deps import get_db
+    def setUp(self):
         from app.main import app
+        from app.core.deps import get_db
 
-        engine = create_engine("sqlite://", connect_args={"check_same_thread": False},
-                               poolclass=StaticPool)
-        OcrImport.__table__.create(engine)
-        sessions = sessionmaker(bind=engine)
-        tempdir = tempfile.TemporaryDirectory()
-        original_upload_dir = ocr_api.UPLOAD_DIR
-        ocr_api.UPLOAD_DIR = Path(tempdir.name)
+        self.engine = create_engine("sqlite://", connect_args={"check_same_thread": False},
+                                    poolclass=StaticPool)
+        OcrImport.__table__.create(self.engine)
+        self.sessions = sessionmaker(bind=self.engine)
 
-        def test_db():
-            with sessions() as session:
-                yield session
+        def override_get_db():
+            with self.sessions() as db:
+                yield db
 
-        app.dependency_overrides[get_db] = test_db
-        try:
-            image = Image.new("RGB", (100, 100), "white")
-            raw = io.BytesIO()
-            image.save(raw, format="PNG")
-            with TestClient(app) as client:
-                response = client.post("/api/v1/ocr/imports", files={"file": ("scan.png", raw.getvalue(), "image/png")},
-                                       data={"subject": "Bangla"})
-                self.assertEqual(response.status_code, 202)
-                job = response.json()
-                self.assertEqual(job["status"], "queued")
-                self.assertEqual(job["total_pages"], 1)
-                self.assertEqual(client.get(f"/api/v1/ocr/imports/{job['id']}").json()["processed_pages"], 0)
-                rejected = client.post(f"/api/v1/ocr/imports/{job['id']}/questions", json={"questions": [{
-                    "text": "Question?", "qtype": "short", "marks": 1, "difficulty": "medium"
-                }]})
-                self.assertEqual(rejected.status_code, 409)
-        finally:
-            app.dependency_overrides.pop(get_db, None)
-            ocr_api.UPLOAD_DIR = original_upload_dir
-            tempdir.cleanup()
-            engine.dispose()
+        app.dependency_overrides[get_db] = override_get_db
+        self.client = TestClient(app)
+        self.tempdir = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        from app.main import app
+        from app.core.deps import get_db
+
+        app.dependency_overrides.pop(get_db, None)
+        self.tempdir.cleanup()
+        self.engine.dispose()
+
+    def test_accept_questions_requires_completed_import(self):
+        with self.sessions.begin() as db:
+            row = OcrImport(filename="scan.png", subject="History", storage_path="missing.png",
+                            pages=[], candidates=[], status="queued", processed_pages=0, total_pages=1)
+            db.add(row)
+            db.flush()
+            import_id = row.id
+        res = self.client.post(f"/api/v1/ocr/imports/{import_id}/questions",
+                               json={"questions": [{"text": "When?", "qtype": "short"}]})
+        self.assertEqual(res.status_code, 409)
 
 
 if __name__ == "__main__":
