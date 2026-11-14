@@ -150,15 +150,21 @@ def _gemini_vision_extract(image: Image.Image, api_key: str | None = None) -> di
         headers={"Content-Type": "application/json"},
         method="POST"
     )
-    try:
-        with urlopen(req, timeout=45) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            candidate = data["candidates"][0]
-            part = candidate["content"]["parts"][0]
-            raw_json = part["text"].strip()
-            return json.loads(raw_json)
-    except (HTTPError, URLError, TimeoutError, KeyError, IndexError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"Gemini Vision API error: {exc}") from exc
+    for attempt in range(2):
+        try:
+            with urlopen(req, timeout=45) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                candidate = data["candidates"][0]
+                part = candidate["content"]["parts"][0]
+                raw_json = part["text"].strip()
+                return json.loads(raw_json)
+        except (HTTPError, URLError, TimeoutError, KeyError, IndexError, json.JSONDecodeError) as exc:
+            is_transient = "503" in str(exc) or "timeout" in str(exc).lower()
+            if attempt == 0 and is_transient:
+                log.info("Gemini transient issue (%s), retrying in 2s...", exc)
+                time.sleep(2)
+                continue
+            raise RuntimeError(f"Gemini Vision API error: {exc}") from exc
 
 
 def _tesseract_image(image: Image.Image) -> str:

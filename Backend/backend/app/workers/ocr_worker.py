@@ -71,6 +71,9 @@ def process_import(import_id: int) -> None:
                 row.pages = [*row.pages, result]
                 row.processed_pages = len(row.pages)
                 row.heartbeat_at = utcnow()
+            # Gentle pacing to avoid burst rate limiters on multi-page PDFs
+            if number < total_pages:
+                time.sleep(1.0)
         with SessionLocal.begin() as db:
             row = db.get(OcrImport, import_id)
             if row.processed_pages != row.total_pages:
